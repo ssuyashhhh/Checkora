@@ -917,15 +917,19 @@ body {
     cursor: pointer;
     transition: all 0.2s ease;
     padding: 0;
+    opacity: 0.75;
 }
 
 .theme-btn:hover {
     transform: scale(1.15);
+    opacity: 1;
 }
 
 .theme-btn.active {
     border-color: #f0c040;
-    box-shadow: 0 0 8px rgba(240, 192, 64, 0.4);
+    box-shadow: 0 0 0 3px #f0c040, 0 0 8px rgba(240, 192, 64, 0.5);
+    transform: scale(1.25);
+    opacity: 1;
 }
 
 .theme-btn[data-theme="classic"] { background-color: #facc15; }
