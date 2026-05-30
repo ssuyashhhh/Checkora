@@ -11,8 +11,21 @@
                   r: 5,
                   q: 9,
                   k: 0
-             };
-
+            };
+            const DAILY_PUZZLES = [
+                {
+                    fen: "6k1/5ppp/8/8/8/8/5PPP/6KQ w - - 0 1",
+                    solution: ["h1h7"]
+                },
+                {
+                    fen: "7k/5K2/6Q1/8/8/8/8/8 w - - 0 1",
+                    solution: ["g6g7"]
+                },
+                {
+                    fen: "6k1/5ppp/8/8/8/8/5PPP/5RK1 w - - 0 1",
+                    solution: ["f1e1"]
+                }
+            ];
             const PIECE_IMG = {};
             for (const c of ['w', 'b'])
                 for (const t of ['k', 'q', 'r', 'b', 'n', 'p'])
@@ -52,6 +65,9 @@
             let gameStartTime = null;
     
             let gameMode = 'pvp';
+            let dailyPuzzleMode = false;
+            let currentPuzzle = null;
+            let puzzleMoveIndex = 0;
             let currentDifficulty = 'medium';
             let currentWhiteName = 'White';
             let currentBlackName = 'Black';
@@ -71,6 +87,41 @@
                     aiBtn.classList.add("active-mode");
                 }
             }
+            // =============================================
+            // Daily Puzzle 
+            // =============================================
+            function getTodayPuzzle() {
+                const today = new Date();
+
+                const seed =
+                    today.getFullYear() * 10000 +
+                    (today.getMonth() + 1) * 100 +
+                    today.getDate();
+
+                return DAILY_PUZZLES[
+                    seed % DAILY_PUZZLES.length
+                ];
+            }
+
+            async function startDailyPuzzle() {
+                currentPuzzle = getTodayPuzzle();
+
+                dailyPuzzleMode = true;
+                puzzleMoveIndex = 0;
+
+                await startNewGame(
+                    "pvp",
+                    "white",
+                    "medium",
+                    currentPuzzle.fen
+                );
+
+                showStatus(
+                    "Daily Puzzle Challenge",
+                    false
+                );
+            }
+    
             let playerColor = 'white';
             let flipped = false;
             let autoFlip = false;
@@ -179,6 +230,7 @@
 
             const newPvPBtn = document.getElementById('newPvPBtn');
             const newAIBtn = document.getElementById('newAIBtn');
+            const dailyPuzzleBtn = document.getElementById('dailyPuzzleBtn');
             const newFenBtn = document.getElementById('newFenBtn');
 
             const fenOverlay = document.getElementById('fenOverlay');
@@ -1558,6 +1610,7 @@
                 if (pauseBtn) pauseBtn.style.display = 'none';
                 if (newPvPBtn) newPvPBtn.style.display = '';
                 if (newAIBtn) newAIBtn.style.display = '';
+                if (dailyPuzzleBtn) dailyPuzzleBtn.style.display = '';
                 if (newFenBtn) newFenBtn.style.display = '';
 
                 let durationText = '';
@@ -2392,6 +2445,7 @@
                 if (drawBtn) drawBtn.style.display = (gameMode === 'pvp') ? 'block' : 'none';
                 if (newPvPBtn) newPvPBtn.style.display = 'none';
                 if (newAIBtn) newAIBtn.style.display = 'none';
+                if (dailyPuzzleBtn) dailyPuzzleBtn.style.display = 'none';
                 if (newFenBtn) newFenBtn.style.display = 'none';
                 if (gameMode === 'ai') {
                     flipped = (playerColor === 'black');
@@ -2823,6 +2877,20 @@
                 
                 requestNewGame('ai');
             };
+            if (dailyPuzzleBtn)
+                dailyPuzzleBtn.onclick = async () => {
+
+                    showConfirm(
+                        "Start Daily Puzzle?",
+                        "Your current game will be lost.",
+                        async () => {
+
+                            await startDailyPuzzle();
+
+                        },
+                        "#f0c040"
+                    );
+                };
 
             if (newFenBtn) newFenBtn.onclick = () => {
                 showConfirm(
