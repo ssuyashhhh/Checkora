@@ -49,6 +49,8 @@ def landing(request):
     """Render the landing page introduction to Checkora."""
     return render(request, 'game/landing.html')
 
+def preloader(request):
+    return render(request, 'game/preloading.html')
 
 @ensure_csrf_cookie
 def index(request):
