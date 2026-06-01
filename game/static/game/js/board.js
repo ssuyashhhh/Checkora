@@ -870,14 +870,13 @@
                 
                 if (gameMode === 'ai'){
                     const diffLabel = (currentDifficulty || 'medium').toUpperCase();
-                    const player_name = playerColor === 'white' ? data.white_name : data.black_name;
+                    const humanName = currentWhiteName || document.getElementById('whiteNameInput')?.value?.trim()?.slice(0, 17) || 'Player';
                     if(playerColor === 'white'){
-                        wName = player_name;
+                        wName = humanName;
                         bName = `AI (Black)`;
                     }else{
-                        bName = player_name;
+                        bName = humanName;
                         wName = `AI (White)`;
-
                     }
                 
                     // Inject difficulty badge after names are set
