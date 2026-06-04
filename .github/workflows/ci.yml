@@ -144,15 +144,14 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🔧 Compile C++ engine for test environment
-        run: |
-          if [ -f "game/engine/main.cpp" ]; then
-            g++ -O2 -std=c++17 game/engine/main.cpp -o game/engine/main
-            chmod +x game/engine/main
-            echo "✅ Engine compiled for tests"
-          else
-            echo "⚠️ No main.cpp — tests will run without native engine"
-          fi
+      - name: 📥 Download compiled engine binary
+        uses: actions/download-artifact@v4
+        with:
+          name: engine-binary-${{ github.sha }}
+          path: game/engine/
+      
+      - name: 🔧 Mark engine binary as executable
+        run: chmod +x game/engine/main
 
       - name: 🧪 Run Django test suite
         id: run_tests
