@@ -12,6 +12,7 @@ from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 from django.test import (
+    Client,
     RequestFactory,
     SimpleTestCase,
     TestCase,
@@ -1575,9 +1576,63 @@ class SecureRegistrationTest(TestCase):
         EMAIL_HOST_PASSWORD='',
     )
     def test_inactive_email_reuses_existing_account(self):
-        """Re-registering with an inactive email should reuse the account."""
+        """Re-registering with different username but same email as inactive user should not reuse/hijack it."""
         old_user = User.objects.create_user(
             username='pendingplayer',
+            email='newchessplayer@example.com',
+            password='OldPassword456!',
+            is_active=False,
+        )
+        old_id = old_user.id
+        response = self.client.post(
+            '/register/',
+            data=self.VALID_PAYLOAD,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/verify-otp/')
+        
+        # Verify the inactive user was not updated/hijacked
+        not_reused = User.objects.get(id=old_id)
+        self.assertEqual(not_reused.username, 'pendingplayer')
+        self.assertTrue(not_reused.check_password('OldPassword456!'))
+        
+        # Verify no new user was created
+        self.assertFalse(User.objects.filter(username='newchessplayer').exists())
+
+    # --- 5. Inactive username conflict — preserved, not deleted ---------------
+
+    @override_settings(
+        DEBUG=True,
+        EMAIL_HOST_USER='',
+        EMAIL_HOST_PASSWORD='',
+    )
+    def test_inactive_username_is_preserved(self):
+        """Inactive accounts must be preserved but not updated/hijacked when email doesn't match."""
+        inactive = User.objects.create_user(
+            username='newchessplayer',
+            email='old@example.com',
+            password='OldPassword456!',
+            is_active=False,
+        )
+        response = self.client.post('/register/', data=self.VALID_PAYLOAD)
+        self.assertEqual(response.status_code, 302)
+        
+        self.assertEqual(User.objects.filter(username='newchessplayer').count(), 1)
+        self.assertTrue(User.objects.filter(id=inactive.id).exists())
+        inactive.refresh_from_db()
+        # Verify the inactive user email was not overwritten/hijacked
+        self.assertEqual(inactive.email, 'old@example.com')
+        self.assertTrue(inactive.check_password('OldPassword456!'))
+
+    @override_settings(
+        DEBUG=True,
+        EMAIL_HOST_USER='',
+        EMAIL_HOST_PASSWORD='',
+    )
+    def test_inactive_user_fully_matches_and_reuses_account(self):
+        """Re-registering with matching username and email of an inactive user should reuse the account."""
+        old_user = User.objects.create_user(
+            username='newchessplayer',
             email='newchessplayer@example.com',
             password='OldPassword456!',
             is_active=False,
@@ -1594,27 +1649,6 @@ class SecureRegistrationTest(TestCase):
         self.assertEqual(reused.email, 'newchessplayer@example.com')
         self.assertTrue(reused.check_password('StrongPass123!'))
         self.assertEqual(User.objects.filter(id=old_id).count(), 1)
-
-    # --- 5. Inactive username conflict — preserved, not deleted ---------------
-
-    @override_settings(
-        DEBUG=True,
-        EMAIL_HOST_USER='',
-        EMAIL_HOST_PASSWORD='',
-    )
-    def test_inactive_username_is_preserved(self):
-        """Inactive accounts must never be deleted during registration."""
-        inactive = User.objects.create_user(
-            username='newchessplayer',
-            email='old@example.com',
-            password='OldPassword456!',
-            is_active=False,
-        )
-        self.client.post('/register/', data=self.VALID_PAYLOAD)
-        self.assertEqual(User.objects.filter(username='newchessplayer').count(), 1)
-        self.assertTrue(User.objects.filter(id=inactive.id).exists())
-        inactive.refresh_from_db()
-        self.assertEqual(inactive.email, 'newchessplayer@example.com')
 
     # --- 6. Concurrent registration — IntegrityError handled ------------------
 
@@ -2002,3 +2036,142 @@ class GameResultMoveHistoryTest(TestCase):
         self.assertEqual(res.winner, 'white')
         self.assertEqual(len(res.moves), 1)
         self.assertEqual(res.moves[0]['notation'], 'e4#')
+
+
+class AdditionalViewsSecurityAndLessonsTest(TestCase):
+    """Test suite for the new view-level security checks and lesson context mapping."""
+
+    def test_inactive_account_merge_prevention(self):
+        # Create two different inactive users
+        user_a = User.objects.create_user(
+            username='inactive_a',
+            email='inactive_a@example.com',
+            password='Password123!',
+            is_active=False
+        )
+        user_b = User.objects.create_user(
+            username='inactive_b',
+            email='inactive_b@example.com',
+            password='Password123!',
+            is_active=False
+        )
+
+        # Post username from A and email from B
+        payload = {
+            'username': 'inactive_a',
+            'email': 'inactive_b@example.com',
+            'password1': 'NewPassword123!',
+            'password2': 'NewPassword123!',
+        }
+
+        # Registration should fall back to generic flow
+        response = self.client.post(reverse('register'), data=payload)
+        self.assertRedirects(response, reverse('verify_otp'))
+
+        # Verify neither user got merged/overwritten
+        user_a.refresh_from_db()
+        user_b.refresh_from_db()
+        self.assertEqual(user_a.email, 'inactive_a@example.com')
+        self.assertEqual(user_b.username, 'inactive_b')
+        self.assertEqual(user_b.email, 'inactive_b@example.com')
+        self.assertFalse(user_a.check_password('NewPassword123!'))
+        self.assertFalse(user_b.check_password('NewPassword123!'))
+
+    def test_inactive_username_hijack_prevention(self):
+        # Create an inactive user A
+        user_a = User.objects.create_user(
+            username='inactive_a',
+            email='inactive_a@example.com',
+            password='OldPassword123!',
+            is_active=False
+        )
+
+        # Attempt to register with User A's username but a new email (attacker's email)
+        payload = {
+            'username': 'inactive_a',
+            'email': 'attacker@example.com',
+            'password1': 'NewPassword123!',
+            'password2': 'NewPassword123!',
+        }
+
+        # Should fall back to generic verification flow to prevent enumeration/hijacking
+        response = self.client.post(reverse('register'), data=payload)
+        self.assertRedirects(response, reverse('verify_otp'))
+
+        # Verify User A's email is not changed and password is not updated
+        user_a.refresh_from_db()
+        self.assertEqual(user_a.email, 'inactive_a@example.com')
+        self.assertTrue(user_a.check_password('OldPassword123!'))
+
+        # Verify no User with attacker@example.com is created
+        self.assertFalse(User.objects.filter(email='attacker@example.com').exists())
+
+    def test_resend_otp_post_only(self):
+        # Verify GET returns 405 Method Not Allowed
+        response = self.client.get(reverse('resend_otp'))
+        self.assertEqual(response.status_code, 405)
+
+        csrf_client = Client(enforce_csrf_checks=True)
+        session = csrf_client.session
+        session['registration_user_id'] = -1
+        session['registration_email'] = 'test@example.com'
+        session.save()
+
+        # Missing CSRF token should fail
+        denied = csrf_client.post(reverse('resend_otp'))
+        self.assertEqual(denied.status_code, 403)
+
+        # With CSRF token should pass
+        csrf_client.get(reverse('index'))
+        token = csrf_client.cookies.get('csrftoken').value
+        allowed = csrf_client.post(reverse('resend_otp'), HTTP_X_CSRFTOKEN=token)
+        self.assertEqual(allowed.status_code, 302)
+        self.assertRedirects(allowed, reverse('verify_otp'))
+
+    def test_resend_otp_deferred_session_writes(self):
+        user = User.objects.create_user(
+            username='temp_user',
+            email='temp@example.com',
+            password='Password123!',
+            is_active=False
+        )
+        session = self.client.session
+        session['registration_user_id'] = user.id
+        initial_hash = 'initial_otp_hash_value'
+        session['registration_otp_hash'] = initial_hash
+        session.save()
+
+        # Mock send_mail to raise SMTPException
+        with mock.patch('game.views.send_mail', side_effect=SMTPException('SMTP error')):
+            response = self.client.post(reverse('resend_otp'), follow=True)
+
+        self.assertContains(response, 'Failed to resend OTP. Please try again.')
+        
+        # Verify the session registration_otp_hash was NOT changed/mutated
+        session = self.client.session
+        self.assertEqual(session.get('registration_otp_hash'), initial_hash)
+
+    def test_lesson_detail_view_exposes_context(self):
+        response = self.client.get(reverse('lesson_detail', args=['how-pieces-move']))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('lesson_steps', response.context)
+        self.assertIn('practice_position', response.context)
+        self.assertNotEqual(response.context['lesson_steps'], [])
+        self.assertIsNotNone(response.context['practice_position'])
+
+        response = self.client.get(
+            reverse('lesson_detail', args=['check-and-checkmate'])
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.get(reverse('lesson_detail', args=['forks']))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('lesson_steps', response.context)
+        self.assertIn('practice_position', response.context)
+        self.assertNotEqual(response.context['lesson_steps'], [])
+
+    def test_lesson_detail_invalid_slug_returns_404(self):
+        response = self.client.get(
+            reverse('lesson_detail', args=['not-a-real-lesson'])
+        )
+        self.assertEqual(response.status_code, 404)
