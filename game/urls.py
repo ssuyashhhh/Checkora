@@ -46,4 +46,6 @@ urlpatterns = [
     path("api/puzzle-stats/", views.puzzle_stats_view, name="puzzle_stats"),
     
     path("achievements/", views.achievements_view, name="achievements"),
+    path("feature-badge/<int:achievement_id>/", views.feature_badge, name="feature_badge"),
+    path("remove-featured-badge/<int:badge_id>/", views.remove_featured_badge, name="remove_featured_badge"),
 ]   

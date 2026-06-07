@@ -13,6 +13,7 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
+from django.shortcuts import get_object_or_404
 from django.utils.http import (
     urlsafe_base64_encode,
     urlsafe_base64_decode
@@ -50,6 +51,7 @@ from .models import (
     LessonProgress,
     Achievement,
     UserAchievement,
+    FeaturedBadge,
 )
 logger = logging.getLogger(__name__)
 from game.services import (
@@ -2347,7 +2349,10 @@ def complete_lesson(request, lesson_name):
 
 @login_required
 def achievements_view(request):
-    achievements = Achievement.objects.all()
+    achievements = Achievement.objects.all().order_by(
+        "category",
+        "title"
+    )
     
     unlocked = set(
         UserAchievement.objects.filter(
@@ -2358,11 +2363,70 @@ def achievements_view(request):
         )
     )
 
+    featured_badges = FeaturedBadge.objects.filter(
+        user=request.user
+    ).select_related("achievement")
+    
     return render(
         request,
         "game/achievements.html",
         {
             "achievements": achievements,
             "unlocked": unlocked,
+            "featured_badges": featured_badges,
         }
     )
+
+@login_required
+def feature_badge(request, achievement_id):
+    achievement = get_object_or_404(
+        Achievement,
+        id=achievement_id
+    )
+
+    # Only unlocked badges can be featured
+    if not UserAchievement.objects.filter(
+        user=request.user,
+        achievement=achievement
+    ).exists():
+        messages.error(
+            request,
+            "You can only feature unlocked badges."
+        )
+        return redirect("achievements")
+
+    # Maximum 3 featured badges
+    if FeaturedBadge.objects.filter(
+        user=request.user
+    ).count() >= 3:
+        messages.error(
+            request,
+            "You can only feature up to 3 badges."
+        )
+        return redirect("achievements")
+
+    FeaturedBadge.objects.get_or_create(
+        user=request.user,
+        achievement=achievement
+    )
+
+    messages.success(
+        request,
+        "Badge featured successfully."
+    )
+
+    return redirect("achievements")
+
+@login_required
+def remove_featured_badge(request, badge_id):
+    FeaturedBadge.objects.filter(
+        id=badge_id,
+        user=request.user
+    ).delete()
+
+    messages.success(
+        request,
+        "Featured badge removed."
+    )
+
+    return redirect("achievements")
