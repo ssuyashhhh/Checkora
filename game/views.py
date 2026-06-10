@@ -54,7 +54,12 @@ from .models import (
     UserAchievement,
     FeaturedBadge,
     UserProgress,
+    PlayerRating,
+    RatingHistory,
 )
+
+from .rating_service import calculate_rating_change
+
 logger = logging.getLogger(__name__)
 from game.services import (
     cleanup_stale_games,
@@ -88,6 +93,51 @@ def index(request):
     return render(request, 'game/board.html')
 
 
+def update_player_rating(user, winner, player_color):
+    rating, _ = PlayerRating.objects.get_or_create(
+        user=user
+    )
+
+    old_rating = rating.rating
+
+    if winner == "draw":
+        result = "draw"
+
+    elif winner == player_color:
+        result = "win"
+
+    else:
+        result = "loss"
+
+    change = calculate_rating_change(result)
+
+    rating.rating = max(
+        100,
+        old_rating + change
+    )
+
+    rating.games_played += 1
+
+    if result == "win":
+        rating.wins += 1
+
+    elif result == "loss":
+        rating.losses += 1
+
+    else:
+        rating.draws += 1
+
+    rating.save()
+
+    RatingHistory.objects.create(
+        user=user,
+        old_rating=old_rating,
+        new_rating=rating.rating,
+        rating_change=change,
+        result=result
+    )
+    
+
 def record_game_result(request, mode, winner, reason, player_color='white', moves=None):
     """Save a completed game result to the database."""
     user = request.user if request.user.is_authenticated else None
@@ -109,6 +159,12 @@ def record_game_result(request, mode, winner, reason, player_color='white', move
     result.save()
 
     if user:
+        update_player_rating(
+            user,
+            winner,
+            player_color
+        )
+        
         check_game_achievements(user)
 
 
@@ -1317,6 +1373,14 @@ def stats_view(request):
     # Handle explicit edge cases (e.g. division by zero for win rate)
     win_percentage = (user_ai_wins / ai_total * 100) if ai_total > 0 else 0
 
+    rating, _ = PlayerRating.objects.get_or_create(
+        user=request.user
+    )
+
+    history = RatingHistory.objects.filter(
+        user=request.user
+    )[:10]
+
     return render(request, 'game/stats.html', {
         'recent': recent,
         'ai_total': ai_total,
@@ -1325,6 +1389,8 @@ def stats_view(request):
         'ai_draws': ai_draws,
         'win_percentage': round(win_percentage, 2),
         'progress': progress,
+        'rating': rating,
+        'history': history,
     })
 
 @login_required
@@ -1336,11 +1402,18 @@ def leaderboard_view(request):
         "-best_streak"
     )
 
+    chess_leaderboard = PlayerRating.objects.select_related(
+        "user"
+    ).order_by(
+        "-rating"
+    )
+
     return render(
         request,
         "game/leaderboard.html",
         {
-            "leaderboard": leaderboard
+            "leaderboard": leaderboard,
+            "chess_leaderboard": chess_leaderboard,
         }
     )
 
