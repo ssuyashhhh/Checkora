@@ -2407,7 +2407,7 @@ def lesson_detail_view(request, lesson_name):
                     "title": "En Passant Opportunity",
                     "position": {
                         "e5": "P",
-                        "d5": "p"
+                        "d5": "P"
                     },
                     "highlight": ["d6"]
                 }
@@ -2420,7 +2420,7 @@ def lesson_detail_view(request, lesson_name):
             ],
             "practice_position": {
                 "e5": "P",
-                "d5": "p"
+                "d5": "P"
             }
         },
 
@@ -2769,7 +2769,7 @@ def lesson_detail_view(request, lesson_name):
                     "title": "Deflect the Rook",
                     "position": {
                         "d8": "R",
-                        "d7": "q"
+                        "d7": "Q"
                     },
                     "highlight": ["d8"]
                 }
@@ -2783,7 +2783,7 @@ def lesson_detail_view(request, lesson_name):
             "practice_position": {
                 "d1": "Q",
                 "d8": "R",
-                "d7": "q"
+                "d7": "Q"
             }
         },
 
@@ -2812,7 +2812,7 @@ def lesson_detail_view(request, lesson_name):
                     "title": "Decoy the King",
                     "position": {
                         "g7": "Q",
-                        "h8": "k"
+                        "h8": "K"
                     },
                     "highlight": ["g7"]
                 }
@@ -2825,7 +2825,7 @@ def lesson_detail_view(request, lesson_name):
             ],
             "practice_position": {
                 "g7": "Q",
-                "h8": "k"
+                "h8": "K"
             }
         },
         

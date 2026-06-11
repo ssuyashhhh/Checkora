@@ -286,12 +286,6 @@ document.addEventListener(
             Q: "♕",
             K: "♔",
 
-            p: "♟",
-            n: "♞",
-            b: "♝",
-            r: "♜",
-            q: "♛",
-            k: "♚",
             
         };
 
