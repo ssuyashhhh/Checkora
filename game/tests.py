@@ -1350,7 +1350,7 @@ class StatsCleanupTest(TestCase):
         self.client.login(username='usera', password='password123')
         response = self.client.get('/stats/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'No Match Records Found')
+        self.assertContains(response, 'No games played yet. Play a game to see your stats here!')
         # Summary cards should show 17 cards
         self.assertContains(response, '<div class="num">0</div>', count=17)
         # No <tr> should be present in the tbody
