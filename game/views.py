@@ -51,6 +51,8 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Max, Min, Sum
 from datetime import timedelta
 
+from .opening_trainer_data import OPENINGS
+
 from .engine import ChessGame
 from .models import (
     GameResult,
@@ -66,6 +68,8 @@ from .models import (
 )
 
 from .rating_service import calculate_rating_change
+from .models import Discussion, Reply
+from .forms import DiscussionForm, ReplyForm
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +77,10 @@ logger = logging.getLogger(__name__)
 LOCKOUT_SECONDS = 900
 USERNAME_MAX_FAILS = 10
 IP_MAX_FAILS = 20
+
+# Limits for game analysis
+MAX_ANALYSIS_MOVES = 500
+MAX_MOVE_LENGTH = 20
 
 from game.services import (
     cleanup_stale_games,
@@ -1770,20 +1778,27 @@ def stats_view(request):
         "puzzle_stats": puzzle_stats,
     })
 
+
 @login_required
 def leaderboard_view(request):
-    leaderboard = PuzzleStats.objects.select_related(
-        "user"
-    ).order_by(
-        "-puzzles_solved",
-        "-best_streak"
-    )
+    try:
+        leaderboard = PuzzleStats.objects.select_related(
+            "user"
+        ).order_by(
+            "-puzzles_solved",
+            "-best_streak"
+        )
+    except Exception:
+        leaderboard = PuzzleStats.objects.none()
 
-    chess_leaderboard = PlayerRating.objects.select_related(
-        "user"
-    ).order_by(
-        "-rating"
-    )[:50]
+    try:
+        chess_leaderboard = PlayerRating.objects.select_related(
+            "user"
+        ).order_by(
+            "-rating"
+        )[:50]
+    except Exception:
+        chess_leaderboard = PlayerRating.objects.none()
 
     return render(
         request,
@@ -1793,6 +1808,7 @@ def leaderboard_view(request):
             "chess_leaderboard": chess_leaderboard,
         }
     )
+
 
 @login_required
 @require_POST
@@ -1816,6 +1832,7 @@ def update_puzzle_stats(request):
     )
 
     return JsonResponse({"success": True})
+
 
 def puzzle_stats_view(request):
     return JsonResponse({
@@ -2002,23 +2019,30 @@ def confirm_delete_account(request, uidb64, token):
     return redirect('landing')
 
 
-@csrf_exempt
 @require_POST
 def analyze_game_view(request):
     """
     Analyze a completed game based on its move history and return statistics.
     Expects JSON payload with 'moves' (list of notation strings), 'result', and 'reason'.
     """
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
     try:
         data = json.loads(request.body)
         moves = data.get('moves', [])
         result = data.get('result', 'Unknown')
         reason = data.get('reason', 'Unknown')
 
-        # Ensure moves is a list of strings
         if not isinstance(moves, list):
-            moves = []
-        moves = [str(m) for m in moves]
+            return JsonResponse({'error': 'Moves must be a list'}, status=400)
+
+        if len(moves) > MAX_ANALYSIS_MOVES:
+            return JsonResponse({'error': f'Moves list cannot exceed {MAX_ANALYSIS_MOVES} entries'}, status=400)
+
+        for m in moves:
+            if not isinstance(m, str) or len(m) > MAX_MOVE_LENGTH:
+                return JsonResponse({'error': f'Move must be a string of at most {MAX_MOVE_LENGTH} characters'}, status=400)
 
         summary = build_summary(moves, result, reason)
         return JsonResponse(summary)
@@ -3306,6 +3330,13 @@ def lesson_map_view(request):
             )
         )
 
+    completed_count = len(completed_lessons)
+
+    total_lessons = sum(
+        len(level["lessons"])
+        for level in LESSON_LEVELS
+    )
+
     unlocked_lessons = get_unlocked_lessons(
         completed_lessons
     )
@@ -3316,30 +3347,71 @@ def lesson_map_view(request):
         {
             "levels": LESSON_LEVELS,
             "completed_lessons": completed_lessons,
+            "completed_count": completed_count,
+            "total_lessons": total_lessons,
             "unlocked_lessons": unlocked_lessons,
         }
     )
 
+def opening_trainer(request):
+    return render(
+        request,
+        "game/opening_trainer.html",
+        {
+            "openings": OPENINGS,
+        }
+    )
 
+
+def opening_detail(request, slug):
+    opening = next(
+        (
+            opening
+            for opening in OPENINGS
+            if opening["slug"] == slug
+        ),
+        None,
+    )
+
+    if opening is None:
+        raise Http404("Opening not found")
+
+    return render(
+        request,
+        "game/opening_detail.html",
+        {
+            "opening": opening,
+        }
+    )
+    
 @login_required
 def achievements_view(request):
-    achievements = Achievement.objects.all().order_by(
-        "category",
-        "title"
-    )
-
-    unlocked = set(
-        UserAchievement.objects.filter(
-            user=request.user
-        ).values_list(
-            "achievement_id",
-            flat=True
+    try:
+        achievements = Achievement.objects.all().order_by(
+            "category",
+            "title"
         )
-    )
+    except Exception:
+        achievements = Achievement.objects.none()
 
-    featured_badges = FeaturedBadge.objects.filter(
-        user=request.user
-    ).select_related("achievement")
+    try:
+        unlocked = set(
+            UserAchievement.objects.filter(
+                user=request.user
+            ).values_list(
+                "achievement_id",
+                flat=True
+            )
+        )
+    except Exception:
+        unlocked = set()
+
+    try:
+        featured_badges = FeaturedBadge.objects.filter(
+            user=request.user
+        ).select_related("achievement")
+    except Exception:
+        featured_badges = FeaturedBadge.objects.none()
 
     return render(
         request,
@@ -3350,7 +3422,6 @@ def achievements_view(request):
             "featured_badges": featured_badges,
         }
     )
-
 
 @login_required
 def feature_badge(request, achievement_id):
@@ -3392,7 +3463,6 @@ def feature_badge(request, achievement_id):
 
     return redirect("achievements")
 
-
 @login_required
 def remove_featured_badge(request, badge_id):
     FeaturedBadge.objects.filter(
@@ -3406,7 +3476,6 @@ def remove_featured_badge(request, badge_id):
     )
 
     return redirect("achievements")
-
 
 @login_required
 def download_badge(request, achievement_id):
@@ -3442,3 +3511,69 @@ def download_badge(request, achievement_id):
         return HttpResponseServerError(
             "Badge generation failed."
         )
+
+def forum_list(request):
+    discussions = Discussion.objects.select_related("user").prefetch_related("replies")
+
+    return render(
+        request,
+        "game/forum_list.html",
+        {
+            "discussions": discussions,
+        }
+    )
+
+def forum_detail(request, discussion_id):
+    discussion = get_object_or_404(Discussion, id=discussion_id)
+    replies = discussion.replies.select_related("user")
+    form = ReplyForm()
+
+    return render(
+        request,
+        "game/forum_detail.html",
+        {
+            "discussion": discussion,
+            "replies": replies,
+            "form": form,
+        }
+    )
+
+@login_required
+def forum_new(request):
+    if request.method == "POST":
+        form = DiscussionForm(request.POST)
+        if form.is_valid():
+            discussion = form.save(commit=False)
+            discussion.user = request.user
+            discussion.save()
+
+            messages.success(request, "Discussion created successfully.")
+            return redirect("forum_detail", discussion_id=discussion.id)
+    else:
+        form = DiscussionForm()
+
+    return render(
+        request,
+        "game/forum_new.html",
+        {
+            "form": form,
+        }
+    )
+
+@login_required
+@require_POST
+def forum_reply(request, discussion_id):
+    discussion = get_object_or_404(Discussion, id=discussion_id)
+    form = ReplyForm(request.POST)
+
+    if form.is_valid():
+        reply = form.save(commit=False)
+        reply.discussion = discussion
+        reply.user = request.user
+        reply.save()
+
+        messages.success(request, "Reply posted successfully.")
+    else:
+        messages.error(request, "Reply could not be posted.")
+
+    return redirect("forum_detail", discussion_id=discussion.id)

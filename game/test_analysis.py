@@ -1,5 +1,7 @@
 import json
-from django.test import TestCase, override_settings
+from django.test import TestCase, Client, override_settings
+from django.urls import reverse
+from game.views import MAX_ANALYSIS_MOVES, MAX_MOVE_LENGTH
 from game.analysis import (
     detect_opening,
     count_captures,
@@ -51,14 +53,33 @@ class AnalysisTest(TestCase):
         self.assertEqual(summary['promotions'], 0)
         self.assertEqual(summary['end_reason'], 'Checkmate')
 
-    def test_api_endpoint(self):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.user = User.objects.create_user(username='testuser', password='password123')
+
+    def test_api_endpoint_requires_login(self):
+        payload = {
+            "moves": ["e4", "e5"],
+            "result": "Win",
+            "reason": "Checkmate"
+        }
+        response = self.client.post(
+            reverse('analyze_game'),
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {'error': 'Unauthorized'})
+
+    def test_api_endpoint_success(self):
+        self.client.force_login(self.user)
         payload = {
             "moves": ["e4", "e5", "Nf3", "Nc6", "Bc4"],
             "result": "Win",
             "reason": "Checkmate"
         }
         response = self.client.post(
-            '/api/analyze-game/',
+            reverse('analyze_game'),
             data=json.dumps(payload),
             content_type='application/json'
         )
@@ -73,3 +94,142 @@ class AnalysisTest(TestCase):
         self.assertEqual(data['promotions'], 0)
         self.assertEqual(data['end_reason'], 'Checkmate')
 
+    def test_api_endpoint_moves_not_list(self):
+        self.client.force_login(self.user)
+        payload = {
+            "moves": "not a list",
+            "result": "Win",
+            "reason": "Checkmate"
+        }
+        response = self.client.post(
+            reverse('analyze_game'),
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': 'Moves must be a list'})
+
+    def test_api_endpoint_moves_too_long(self):
+        self.client.force_login(self.user)
+        payload = {
+            "moves": ["e4"] * (MAX_ANALYSIS_MOVES + 1),
+            "result": "Win",
+            "reason": "Checkmate"
+        }
+        response = self.client.post(
+            reverse('analyze_game'),
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': f'Moves list cannot exceed {MAX_ANALYSIS_MOVES} entries'})
+
+    def test_api_endpoint_move_string_too_long(self):
+        self.client.force_login(self.user)
+        payload = {
+            "moves": ["e4", "a" * (MAX_MOVE_LENGTH + 1)],
+            "result": "Win",
+            "reason": "Checkmate"
+        }
+        response = self.client.post(
+            reverse('analyze_game'),
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': f'Move must be a string of at most {MAX_MOVE_LENGTH} characters'})
+
+    def test_api_endpoint_move_not_string(self):
+        self.client.force_login(self.user)
+        payload = {
+            "moves": ["e4", 123],
+            "result": "Win",
+            "reason": "Checkmate"
+        }
+        response = self.client.post(
+            reverse('analyze_game'),
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': f'Move must be a string of at most {MAX_MOVE_LENGTH} characters'})
+
+    def test_api_endpoint_moves_exact_limit(self):
+        self.client.force_login(self.user)
+        payload = {
+            "moves": ["e4"] * MAX_ANALYSIS_MOVES,
+            "result": "Win",
+            "reason": "Checkmate"
+        }
+        response = self.client.post(
+            reverse('analyze_game'),
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('total_moves', data)
+
+    def test_api_endpoint_move_string_exact_limit(self):
+        self.client.force_login(self.user)
+        payload = {
+            "moves": ["e4", "a" * MAX_MOVE_LENGTH],
+            "result": "Win",
+            "reason": "Checkmate"
+        }
+        response = self.client.post(
+            reverse('analyze_game'),
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('total_moves', data)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class AnalyzeGameCsrfTest(TestCase):
+    """Verify that CSRF protection is enforced on analyze_game_view."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.user = User.objects.create_user(
+            username='csrfuser', password='password123'
+        )
+
+    def test_post_without_csrf_token_is_rejected(self):
+        """POST without a CSRF token must return 403."""
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.user)
+
+        response = csrf_client.post(
+            reverse('analyze_game'),
+            data=json.dumps({
+                'moves': ['e4', 'e5'],
+                'result': 'Win',
+                'reason': 'Checkmate',
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_post_with_valid_csrf_token_succeeds(self):
+        """POST with a valid X-CSRFToken header must return 200."""
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.user)
+
+        # Fetch a CSRF cookie by hitting a GET endpoint
+        csrf_client.get(reverse('index'))
+        token = csrf_client.cookies['csrftoken'].value
+
+        response = csrf_client.post(
+            reverse('analyze_game'),
+            data=json.dumps({
+                'moves': ['e4', 'e5'],
+                'result': 'Win',
+                'reason': 'Checkmate',
+            }),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(response.status_code, 200)

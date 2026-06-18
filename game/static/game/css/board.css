@@ -44,7 +44,7 @@ body {
     background-color: var(--bg-primary);
     color: var(--text-primary);
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -71,7 +71,6 @@ body {
     gap: 8px;
     flex-wrap: nowrap;
 }
-
 /* Logo home link */
 .logo-link {
     display: flex;
@@ -1742,7 +1741,7 @@ body {
   flex-direction: column;
   gap: 10px;
   position: fixed;
-  top: 14px;
+  top: 80px;
   right: 12px;
   z-index: 10000;
 }
@@ -1754,7 +1753,7 @@ body {
     flex-direction: column;
     gap: 10px;
     position: fixed;
-    top: 14px;
+    top: 90px;
     right: 12px;
     z-index: 10000;
   }
@@ -1892,6 +1891,19 @@ body {
     .clock {
         min-width: 0;
         width: 100%;
+    }
+    .m-fab {
+        top: auto;
+        bottom: 16px;
+        right: 12px;
+
+        flex-direction: row;
+        gap: 8px;
+    }
+
+    .m-fab-btn {
+        width: 40px;
+        height: 40px;
     }
 }
 
