@@ -112,6 +112,7 @@
           <a href="#about">About Us</a>
           <a href="#features">Features</a>
           <a href="#faq">FAQ</a>
+          <a href="{% url 'forum' %}">Forum</a>
         </div>
       </div>
       <div class="nav-right">
@@ -123,6 +124,10 @@
           <button type="button" class="profile-btn">{{ user.username }} <svg class="profile-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></button>
           <div class="dropdown-content">
             <a href="/play/"> Dashboard </a>
+
+            <a href="{% url 'opening_trainer' %}">
+                Opening Trainer
+            </a>
 
             <a href="/stats/"> Stats </a>
 
@@ -1629,7 +1634,6 @@
         if (!isCorrect) { fb.style.color = '#ef4444'; fb.textContent = '✗ Not quite — 2.Nf3 is the key move.'; }
     }
   </script>
-      <script src="{% static 'game/js/dropdown.js' %}"></script>
   <!-- Keyboard Shortcuts Modal -->
 <div
   id="shortcutsModal"
@@ -1779,6 +1783,6 @@
 
 })();
 </script>
-    <script src="{% static 'game/js/dropdown.js' %}"></script>
+  <script src="{% static 'game/js/dropdown.js' %}"></script>
   </body>
 </html>
