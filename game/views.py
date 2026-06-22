@@ -1920,8 +1920,61 @@ def get_daily_puzzle(request):
         "id": puzzle.id,
         "title": puzzle.title,
         "fen": puzzle.fen,
-        "solution": puzzle.solution,
         "difficulty": puzzle.difficulty or "medium"
+    })
+
+
+def puzzles_view(request):
+    """Render the puzzles dashboard page."""
+    return render(request, "game/puzzle_list.html")
+
+
+@require_GET
+def puzzles_list_api(request):
+    """API endpoint to get list of puzzles, excluding solutions."""
+    puzzles = ChessPuzzle.objects.all()
+
+    # Filter by difficulty
+    difficulty = request.GET.get('difficulty')
+    if difficulty:
+        puzzles = puzzles.filter(difficulty__iexact=difficulty)
+
+    # Search by title
+    search_query = request.GET.get('search') or request.GET.get('q')
+    if search_query:
+        puzzles = puzzles.filter(title__icontains=search_query)
+
+    puzzles_data = []
+    for puzzle in puzzles:
+        puzzles_data.append({
+            "id": puzzle.id,
+            "title": puzzle.title,
+            "fen": puzzle.fen,
+            "difficulty": puzzle.difficulty or "medium",
+            "date": puzzle.date.isoformat() if puzzle.date else None
+        })
+    return JsonResponse(puzzles_data, safe=False)
+
+
+@require_GET
+def puzzle_detail_api(request, puzzle_id):
+    """API endpoint to get a single puzzle's details (excluding solution)."""
+    puzzle = get_object_or_404(ChessPuzzle, id=puzzle_id)
+    return JsonResponse({
+        "id": puzzle.id,
+        "title": puzzle.title,
+        "fen": puzzle.fen,
+        "difficulty": puzzle.difficulty or "medium",
+        "date": puzzle.date.isoformat() if puzzle.date else None
+    })
+
+
+@require_GET
+def puzzle_solution_api(request, puzzle_id):
+    """API endpoint to retrieve the solution array for a specific puzzle."""
+    puzzle = get_object_or_404(ChessPuzzle, id=puzzle_id)
+    return JsonResponse({
+        "solution": puzzle.solution
     })
 
 
@@ -1936,7 +1989,8 @@ def cleanup_cron(request):
     expected = f"Bearer {cron_secret}" if cron_secret else ""
     provided = auth_header or ""
 
-    if not cron_secret or not secrets_module.compare_digest(expected, provided):
+    if (not cron_secret or
+            not secrets_module.compare_digest(expected, provided)):
         return JsonResponse({'error': 'Unauthorized'}, status=401)
 
     try:
