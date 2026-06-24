@@ -336,8 +336,10 @@ background-size:60px 60px;
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    opacity: 1;
-    pointer-events: auto;
+
+    opacity: 0;
+    pointer-events: none;
+
     transition: opacity 0.3s ease;
     z-index: 999;
 }
@@ -601,6 +603,17 @@ background-size:60px 60px;
 </div>
 <script src="{% static 'game/js/roadmap_connectors.js' %}"></script>
 <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const backToTop = document.getElementById("backToTopWrapper");
+
+        window.addEventListener("scroll", () => {
+            if (window.scrollY > 300) {   // show after 300px scroll
+                backToTop.classList.add("visible");
+            } else {
+                backToTop.classList.remove("visible");
+            }
+        });
+    });
     document.addEventListener('DOMContentLoaded', function() {
         if (localStorage.getItem('lessons_guest_alert_dismissed') === 'true') {
             var alert = document.getElementById('guest-alert');
