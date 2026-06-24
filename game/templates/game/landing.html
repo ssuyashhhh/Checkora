@@ -1917,7 +1917,17 @@ updateCursorType('default');
       }
     });
   </script>
-    <script src="{% static 'game/js/dropdown.js' %}"></script>
+    <script src="{% static 'game/js/dropdown.js' %}?v=2"></script>
     <script src="{% static 'game/js/theme.js' %}?v=1"></script>
+    <script>
+    // close only when clicking outside each active dropdown
+    document.addEventListener('click', function(e) {
+        document.querySelectorAll('.profile-dropdown.active').forEach(function(menu) {
+            if (!menu.contains(e.target)) {
+                menu.classList.remove('active');
+            }
+        });
+    });
+    </script>
   </body>
 </html>
