@@ -52,8 +52,8 @@
         
         const count = options.count ?? 100;
         const spread = options.spread ?? 70;
-        const colors = options.colors ?? ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42', '#ffa62d', '#ff36ff'];
-        const shapes = options.shapes ?? ['square', 'circle'];
+        const colors = options.colors?.length ? options.colors : ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42', '#ffa62d', '#ff36ff'];
+        const shapes = options.shapes?.length ? options.shapes : ['square', 'circle'];
         const originX = options.origin?.x ?? 0.5;
         const originY = options.origin?.y ?? 0.6; // default slightly lower than center
         const angle = options.angle ?? 90;
