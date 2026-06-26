@@ -2523,6 +2523,10 @@ body {
     color: #111827;
 }
 
+[data-theme="light"] .faq-item:hover .faq-question {
+    color: var(--accent-gold);
+}
+
 [data-theme="light"] .faq-answer-content {
     color: #374151;
 }
