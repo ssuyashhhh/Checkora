@@ -172,6 +172,7 @@ def _positive_int_env(name: str, default: int) -> int:
         raise ValueError(f'{name} must be >= 1')
     return value
 
+
 # Analyze Game Rate Limiting
 # Configures the rate limits for the analyze_game_view endpoint.
 # Window duration for tracking analyze game requests
