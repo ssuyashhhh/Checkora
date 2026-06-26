@@ -1474,26 +1474,33 @@ def increment_counter(key, timeout):
             break
         time.sleep(0.05)
 
-    if not acquired:
-        # fail closed for brute-force logic without taking down login
-        current = cache.get(key)
+    def _fallback_increment():
+        now = time.time()
+        expiry_key = f"{key}:expiry"
+        expires_at = cache.get(expiry_key)
+        
+        if expires_at is None or now >= expires_at:
+            expires_at = now + timeout
+            cache.set(expiry_key, expires_at, timeout=timeout)
+            
+        remaining = max(1, int(expires_at - now))
+        
+        raw_val = cache.get(key)
         try:
-            current = int(current) if current is not None else 0
-        except (ValueError, TypeError):
-            current = 0
-        next_val = current + 1
-        cache.set(key, next_val, timeout=timeout)
-        return next_val
-
-    try:
-        val = cache.get(key)
-        try:
-            val = int(val) if val is not None else 0
+            val = int(raw_val) if raw_val is not None else 0
         except (ValueError, TypeError):
             val = 0
+            
         val += 1
-        cache.set(key, val, timeout=timeout)
+        cache.set(key, val, timeout=remaining)
         return val
+
+    if not acquired:
+        # fail closed for brute-force logic without taking down login
+        return _fallback_increment()
+
+    try:
+        return _fallback_increment()
     finally:
         if acquired:
             cache.delete(lock_key)
