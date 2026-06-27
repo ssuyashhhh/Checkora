@@ -94,6 +94,8 @@ from game.services import (
     check_puzzle_achievements,
     generate_badge,
     update_opening_progress,
+    create_or_update_active_game,
+    delete_active_game,
 )
 
 from django.http import FileResponse
@@ -118,6 +120,11 @@ def index(request):
     if 'game' not in request.session:
         game = ChessGame()
         request.session['game'] = game.to_dict()
+        create_or_update_active_game(
+            request,
+            request.session['game']
+        )
+
     return render(request, 'game/board.html')
 
 
@@ -246,6 +253,10 @@ def make_move(request):
     if success:
         request.session['game'] = game.to_dict()
         request.session.modified = True
+        create_or_update_active_game(
+            request,
+            request.session['game']
+        )
         if game_status == 'checkmate':
             winner = 'black' if game.current_turn == 'white' else 'white'
             game_result = record_game_result(request, game.mode, winner, 'checkmate', game.player_color, moves=game.move_history)            
@@ -380,6 +391,11 @@ def new_game(request):
     request.session.modified = True
     request.session.save()
 
+    create_or_update_active_game(
+        request,
+        request.session['game']
+    )
+
     return JsonResponse({
         'valid': True,
         'board': game.board,
@@ -416,6 +432,11 @@ def resume_game(request):
     game.last_ts = time.time()
     request.session['game'] = game.to_dict()
     request.session.modified = True
+
+    create_or_update_active_game(
+        request,
+        request.session['game']
+    )
 
     return JsonResponse({
         'valid': True,
@@ -482,6 +503,11 @@ def get_state(request):
     request.session['game'] = game.to_dict()
     request.session.modified = True
 
+    create_or_update_active_game(
+        request,
+        request.session['game']
+    )
+
     return JsonResponse({
         'board': game.board,
         'current_turn': game.current_turn,
@@ -530,6 +556,11 @@ def set_pause(request):
     request.session['game'] = game.to_dict()
     request.session.modified = True
 
+    create_or_update_active_game(
+        request,
+        request.session['game']
+    )
+
     return JsonResponse({
         'paused': game.paused,
         'white_time': game.white_time,
@@ -575,6 +606,11 @@ def ai_move(request):
         request.session['game'] = game.to_dict()
         request.session.modified = True
 
+        create_or_update_active_game(
+            request,
+            request.session['game']
+        )
+
         return JsonResponse({
             'valid': True,
             'game_status': game_status,
@@ -595,6 +631,11 @@ def ai_move(request):
     if success:
         request.session['game'] = game.to_dict()
         request.session.modified = True
+
+        create_or_update_active_game(
+            request,
+            request.session['game']
+        )
 
         if game_status == 'checkmate':
             winner = 'black' if game.current_turn == 'white' else 'white'
@@ -665,6 +706,12 @@ def offer_draw(request):
         game.draw_reason = 'agreement'
         request.session['game'] = game.to_dict()
         request.session.modified = True
+
+        create_or_update_active_game(
+            request,
+            request.session['game']
+        )
+
         record_game_result(request, game.mode, 'draw', 'agreement', game.player_color, moves=game.move_history)
         return JsonResponse({
             'success': True,
@@ -693,6 +740,11 @@ def resign_game(request):
     game.game_status = game_status
     request.session['game'] = game.to_dict()
     request.session.modified = True
+
+    create_or_update_active_game(
+        request,
+        request.session['game']
+    )
 
     try:
         game_result = record_game_result(request, game.mode, winner, 'resign', game.player_color, moves=game.move_history)
