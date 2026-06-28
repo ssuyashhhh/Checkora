@@ -450,10 +450,23 @@ body {
 }
 
 .cursor.orbit {
-    width: 12px;
-    height: 12px;
-    background: rgba(240, 192, 64, 1);
-    box-shadow: 0 0 15px rgba(240, 192, 64, 0.4);
+    /* The orbit cursor is a tiny central body with a ring around it,
+       plus a "planet" that travels along the ring. Implementation:
+       - Parent .cursor: 40x40 container with a central radial-gradient
+         "sun" painted as background-image (avoids touching transform).
+       - .cursor.orbit::before: thin rotating ring (the orbit path)
+       - .cursor.orbit::after: small dot that travels along the ring
+       The ring + planet live on pseudo-elements so they don't compete
+       with the JS-set transform on the parent. */
+    width: 40px;
+    height: 40px;
+    background: radial-gradient(circle at center,
+        #fff5d0 0%, #f0c040 35%, rgba(240, 192, 64, 0.6) 60%, rgba(240, 192, 64, 0) 75%);
+    background-repeat: no-repeat;
+    box-shadow: none;
+    /* The JS writes translate3d(mouseX - 8, mouseY - 8). With width/height
+       40px, that still anchors the top-left at the cursor; the visible
+       ring is centered inside this 40px box. */
 }
 
 /* ── Chess variant: a pawn glyph follows the pointer with a soft glow. ── */
@@ -478,24 +491,60 @@ body {
     transform: rotate(-15deg);
 }
 
-/* Pulsing scale animation lives on a CHILD pseudo-element so it never
-   overrides the parent .cursor's transform (which JS writes every frame
-   to follow the mouse). Animating the parent's transform from CSS would
-   blow away the JS-set translate3d(mouseX, mouseY, 0) every frame. */
+/* Orbit ring (the path). Drawn as a thin gold circle outline on
+   .cursor.orbit::before, rotating slowly to give a "solar system" feel.
+   The ring is centered on the 40x40 .cursor box. */
 .cursor.orbit::before {
     content: '';
     position: absolute;
-    inset: 0;
+    left: 50%;
+    top: 50%;
+    width: 36px;
+    height: 36px;
+    margin-left: -18px;
+    margin-top: -18px;
     border-radius: 50%;
-    background: inherit;
-    box-shadow: inherit;
-    animation: cursor-Orbit 0.9s ease-in-out infinite;
+    border: 1.5px dashed rgba(240, 192, 64, 0.55);
+    box-shadow: 0 0 8px rgba(240, 192, 64, 0.35);
+    animation: cursor-Orbit-Spin 6s linear infinite;
 }
 
-@keyframes cursor-Orbit {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.6); }
-    100% { transform: scale(1); }
+/* The "planet" — a small gold dot that orbits the center along the ring.
+   We use rotate(angle) on the parent wrapper and translate outward on
+   the dot itself to place it on the ring's edge; the parent rotation
+   sweeps it around. Both transforms compose without touching the JS-set
+   translate3d on .cursor. */
+.cursor.orbit::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    margin-top: -4px;
+    /* Push the planet outward to the edge of the 36px ring (radius 18),
+       then the parent rotate() (set by animation) sweeps it around. */
+    transform-origin: center;
+    animation: cursor-Orbit-Revolve 2.4s linear infinite;
+    background: radial-gradient(circle at 30% 30%, #fff5d0 0%, #f0c040 60%, rgba(240, 192, 64, 0) 100%);
+    border-radius: 50%;
+    box-shadow: 0 0 6px 1px rgba(255, 224, 130, 0.95), 0 0 14px 3px rgba(240, 192, 64, 0.5);
+}
+
+@keyframes cursor-Orbit-Spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* The planet revolves: starts at top of ring (translateY -18px),
+   then the rotate() wrapper carries it around. We can't animate the
+   individual transform parts separately, but rotating the whole ::after
+   around the cursor center while keeping the offset is exactly what
+   we want — rotate composes with translateY to produce orbital motion. */
+@keyframes cursor-Orbit-Revolve {
+    from { transform: rotate(0deg) translateY(-18px) rotate(0deg); }
+    to   { transform: rotate(360deg) translateY(-18px) rotate(-360deg); }
 }
 
 @keyframes sparkle-Sprinkle {
